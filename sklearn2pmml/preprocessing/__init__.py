@@ -87,7 +87,7 @@ class LookupTransformer(BaseEstimator, TransformerMixin):
 		func = lambda k: transform_dict[k]
 		if hasattr(y, "apply"):
 			return y.apply(func)
-		return numpy.vectorize(func)(y)
+		return numpy.array([func(k) for k in y])
 
 class MultiLookupTransformer(LookupTransformer):
 

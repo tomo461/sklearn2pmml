@@ -41,7 +41,7 @@ class Domain(BaseEstimator, TransformerMixin):
 	def __init__(self, missing_values = None, missing_value_treatment = "as_is", missing_value_replacement = None, invalid_value_treatment = "return_invalid", invalid_value_replacement = None, with_data = True, with_statistics = True):
 		if missing_values is not None:
 			self.missing_values = missing_values
-		missing_value_treatments = ["as_is", "as_mean", "as_mode", "as_median", "as_value"]
+		missing_value_treatments = ["as_is", "as_mean", "as_mode", "as_median", "as_value", "return_invalid"]
 		if missing_value_treatment not in missing_value_treatments:
 			raise ValueError("Missing value treatment {0} not in {1}".format(missing_value_treatment, missing_value_treatments))
 		self.missing_value_treatment = missing_value_treatment
@@ -183,6 +183,43 @@ class ContinuousDomain(Domain):
 			mask = self._positive_outlier_mask(X)
 			X[mask] = self.high_value
 		return super(ContinuousDomain, self).transform(X)
+
+class TemporalDomain(Domain):
+
+	def __init__(self, missing_values = None, missing_value_treatment = "as_is", missing_value_replacement = None, invalid_value_treatment = "return_invalid", invalid_value_replacement = None):
+		super(TemporalDomain, self).__init__(missing_values = missing_values, missing_value_treatment = missing_value_treatment, missing_value_replacement = missing_value_replacement, invalid_value_treatment = invalid_value_treatment, invalid_value_replacement = invalid_value_replacement, with_data = False, with_statistics = False)
+
+	def _to_instant(self, X):
+		return X.to_pydatetime()
+
+	def fit(self, X, y = None):
+		return self
+
+	def transform(self, X):
+		shape = X.shape
+		if len(shape) > 1:
+			X = X.ravel()
+		X = pandas.to_datetime(X, yearfirst = True, origin = "unix")
+		X = self._to_instant(X)
+		if len(shape) > 1:
+			X = X.reshape(shape)
+		return X
+
+class DateDomain(TemporalDomain):
+
+	def __init__(self, missing_values = None, missing_value_treatment = "as_is", missing_value_replacement = None, invalid_value_treatment = "return_invalid", invalid_value_replacement = None):
+		super(DateDomain, self).__init__(missing_values = missing_values, missing_value_treatment = missing_value_treatment, missing_value_replacement = missing_value_replacement, invalid_value_treatment = invalid_value_treatment, invalid_value_replacement = invalid_value_replacement)
+
+	def _to_instant(self, X):
+		return super(DateDomain, self)._to_instant(X.floor("D"))
+
+class DateTimeDomain(TemporalDomain):
+
+	def __init__(self, missing_values = None, missing_value_treatment = "as_is", missing_value_replacement = None, invalid_value_treatment = "return_invalid", invalid_value_replacement = None):
+		super(DateTimeDomain, self).__init__(missing_values = missing_values, missing_value_treatment = missing_value_treatment, missing_value_replacement = missing_value_replacement, invalid_value_treatment = invalid_value_treatment, invalid_value_replacement = invalid_value_replacement)
+
+	def _to_instant(self, X):
+		return super(DateTimeDomain, self)._to_instant(X.floor("S"))
 
 class MultiDomain(BaseEstimator, TransformerMixin):
 

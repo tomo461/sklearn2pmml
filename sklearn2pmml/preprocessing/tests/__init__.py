@@ -1,7 +1,10 @@
+from datetime import datetime
 from pandas import DataFrame, Series
 from sklearn.preprocessing import Imputer
 from sklearn_pandas import DataFrameMapper
-from sklearn2pmml.preprocessing import Aggregator, CutTransformer, ExpressionTransformer, LookupTransformer, MultiLookupTransformer, PMMLLabelBinarizer, PMMLLabelEncoder, PowerFunctionTransformer, StringNormalizer
+from sklearn.pipeline import FeatureUnion, Pipeline
+from sklearn2pmml.decoration import Alias, DateDomain, DateTimeDomain
+from sklearn2pmml.preprocessing import Aggregator, CutTransformer, DaysSinceYearTransformer, ExpressionTransformer, LookupTransformer, MultiLookupTransformer, PMMLLabelBinarizer, PMMLLabelEncoder, PowerFunctionTransformer, SecondsSinceYearTransformer, StringNormalizer
 from unittest import TestCase
 
 import math
@@ -38,6 +41,44 @@ class CutTransformerTest(TestCase):
 		self.assertTrue(numpy.isnan(transformer.transform(X)).tolist()[0])
 		X = numpy.array([5.0])
 		self.assertTrue(numpy.isnan(transformer.transform(X)).tolist()[0])
+
+class DurationTransformerTest(TestCase):
+
+	def test_days_transform(self):
+		transformer = DaysSinceYearTransformer(year = 1960)
+		y = numpy.array([datetime(1960, 1, 1), datetime(1960, 1, 2), datetime(1960, 2, 1), datetime(1959, 12, 31), datetime(2003, 4, 1)])
+		yt = transformer.transform(y)
+		self.assertEqual([0, 1, 31, -1, 15796], yt.tolist())
+
+	def test_seconds_transform(self):
+		transformer = SecondsSinceYearTransformer(year = 1960)
+		y = numpy.array([datetime(1960, 1, 1), datetime(1960, 1, 1, 0, 0, 1), datetime(1960, 1, 1, 0, 1, 0), datetime(1959, 12, 31, 23, 59, 59), datetime(1960, 1, 3, 3, 30, 3)])
+		yt = transformer.transform(y)
+		self.assertEqual([0, 1, 60, -1, 185403], yt.tolist())
+
+	def test_timedelta_days(self):
+		X = DataFrame([["2018-12-31", "2019-01-01"], ["2019-01-31", "2019-01-01"]], columns = ["left", "right"])
+		pipeline = Pipeline([
+			("union", FeatureUnion([
+				("left_mapper", DataFrameMapper([
+					("left", [DateDomain(), DaysSinceYearTransformer(year = 2010)])
+				])),
+				("right_mapper", DataFrameMapper([
+					("right", [DateDomain(), DaysSinceYearTransformer(year = 2010)])
+				]))
+			])),
+			("expression", Alias(ExpressionTransformer("X[0] - X[1]"), "delta(left, right)", prefit = True))
+		])
+		Xt = pipeline.fit_transform(X)
+		self.assertEqual([[-1], [30]], Xt.tolist())
+
+	def test_timedelta_seconds(self):
+		X = DataFrame([["2018-12-31T23:59:59", "2019-01-01T00:00:00"], ["2019-01-01T03:30:03", "2019-01-01T00:00:00"]], columns = ["left", "right"])
+		mapper = DataFrameMapper([
+			(["left", "right"], [DateTimeDomain(), SecondsSinceYearTransformer(year = 2010), ExpressionTransformer("X[0] - X[1]")])
+		])
+		Xt = mapper.fit_transform(X)
+		self.assertEqual([[-1], [12603]], Xt.tolist())
 
 class ExpressionTransformerTest(TestCase):
 
@@ -187,21 +228,21 @@ class PowerFunctionTransformerTest(TestCase):
 	def test_power(self):
 		X = numpy.asarray([-2, -1, 0, 1, 2])
 		pow = PowerFunctionTransformer(power = 1)
-		self.assertEquals(X.tolist(), pow.transform(X).tolist())
+		self.assertEqual(X.tolist(), pow.transform(X).tolist())
 		pow = PowerFunctionTransformer(power = 2)
-		self.assertEquals([4, 1, 0, 1, 4], pow.transform(X).tolist())
+		self.assertEqual([4, 1, 0, 1, 4], pow.transform(X).tolist())
 		pow = PowerFunctionTransformer(power = 3)
-		self.assertEquals([-8, -1, 0, 1, 8], pow.transform(X).tolist())
+		self.assertEqual([-8, -1, 0, 1, 8], pow.transform(X).tolist())
 
 class StringNormalizerTest(TestCase):
 
 	def test_normalize(self):
 		X = numpy.asarray([" One", " two ", "THRee "])
 		normalizer = StringNormalizer(function = None)
-		self.assertEquals(["One", "two", "THRee"], normalizer.transform(X).tolist())
+		self.assertEqual(["One", "two", "THRee"], normalizer.transform(X).tolist())
 		normalizer = StringNormalizer(function = "uppercase", trim_blanks = False)
-		self.assertEquals([" ONE", " TWO ", "THREE "], normalizer.transform(X).tolist())
+		self.assertEqual([" ONE", " TWO ", "THREE "], normalizer.transform(X).tolist())
 		normalizer = StringNormalizer(function = "lowercase")
-		self.assertEquals(["one", "two", "three"], normalizer.transform(X).tolist())
+		self.assertEqual(["one", "two", "three"], normalizer.transform(X).tolist())
 		X = Series(X, dtype = str)
-		self.assertEquals(["one", "two", "three"], normalizer.transform(X).tolist())
+		self.assertEqual(["one", "two", "three"], normalizer.transform(X).tolist())

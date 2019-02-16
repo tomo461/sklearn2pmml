@@ -1,4 +1,5 @@
 from collections import defaultdict
+from datetime import datetime
 from pandas import Series
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.utils import column_or_1d
@@ -42,6 +43,45 @@ class CutTransformer(BaseEstimator, TransformerMixin):
 	def transform(self, y):
 		y = column_or_1d(y, warn = True)
 		return pandas.cut(y, bins = self.bins, right = self.right, labels = self.labels, include_lowest = self.include_lowest)
+
+class DurationTransformer(BaseEstimator, TransformerMixin):
+
+	def __init__(self, year):
+		if year < 1900:
+			raise ValueError("Year {0} is earlier than 1900".format(year))
+		self.epoch = datetime(year, 1, 1, tzinfo = None)
+
+	def _to_duration(self, td):
+		return td
+
+	def fit(self, y):
+		return self
+
+	def transform(self, y):
+		shape = y.shape
+		if len(shape) > 1:
+			y = y.ravel()
+		y = pandas.to_timedelta(y - self.epoch)
+		y = self._to_duration(y)
+		if len(shape) > 1:
+			y = y.reshape(shape)
+		return y
+
+class DaysSinceYearTransformer(DurationTransformer):
+
+	def __init__(self, year):
+		super(DaysSinceYearTransformer, self).__init__(year)
+
+	def _to_duration(self, td):
+		return (td.days).values
+
+class SecondsSinceYearTransformer(DurationTransformer):
+
+	def __init__(self, year):
+		super(SecondsSinceYearTransformer, self).__init__(year)
+
+	def _to_duration(self, td):
+		return ((td.total_seconds()).values).astype(int)
 
 class ExpressionTransformer(BaseEstimator, TransformerMixin):
 
